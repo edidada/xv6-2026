@@ -29,6 +29,6 @@ jobs:
         with:
           name: lab-results
           path: |
-            /tmp/xv6-grade.log
+            grade.log
             xv6.out*
             ci-transcripts/

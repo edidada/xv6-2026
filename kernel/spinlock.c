@@ -125,37 +125,39 @@ static void
 read_acquire_inner(struct rwspinlock *rwlk)
 {
   for(;;){
-    uint64 state = __atomic_load_n(&rwlk->state, __ATOMIC_ACQUIRE);
-    if(state >> 32) continue;
-    if(__atomic_compare_exchange_n(&rwlk->state, &state, state+1, 0,
-                                  __ATOMIC_ACQUIRE, __ATOMIC_RELAXED)) return;
+    while(__atomic_load_n(&rwlk->writers, __ATOMIC_SEQ_CST) ||
+          __atomic_load_n(&rwlk->active_writer, __ATOMIC_SEQ_CST)) ;
+    __atomic_fetch_add(&rwlk->readers, 1, __ATOMIC_SEQ_CST);
+    // A writer may have published its intent between our check and join.
+    if(!__atomic_load_n(&rwlk->writers, __ATOMIC_SEQ_CST) &&
+       !__atomic_load_n(&rwlk->active_writer, __ATOMIC_SEQ_CST)) return;
+    __atomic_fetch_sub(&rwlk->readers, 1, __ATOMIC_SEQ_CST);
   }
 }
 
 static void
 read_release_inner(struct rwspinlock *rwlk)
 {
-  __atomic_fetch_sub(&rwlk->state, 1, __ATOMIC_RELEASE);
+  __atomic_fetch_sub(&rwlk->readers, 1, __ATOMIC_SEQ_CST);
 }
 
 static void
 write_acquire_inner(struct rwspinlock *rwlk)
 {
-  const uint64 pending = 1ULL << 32, writer = 1ULL << 63;
-  __atomic_fetch_add(&rwlk->state, pending, __ATOMIC_ACQ_REL);
+  __atomic_fetch_add(&rwlk->writers, 1, __ATOMIC_SEQ_CST);
   for(;;){
-    uint64 state = __atomic_load_n(&rwlk->state, __ATOMIC_ACQUIRE);
-    if((state & writer) || (uint)state) continue;
-    uint64 desired = (state-pending) | writer;
-    if(__atomic_compare_exchange_n(&rwlk->state, &state, desired, 0,
-                                  __ATOMIC_ACQUIRE, __ATOMIC_RELAXED)) return;
+    uint expected = 0;
+    if(__atomic_compare_exchange_n(&rwlk->active_writer, &expected, 1, 0,
+                                  __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST)) break;
   }
+  while(__atomic_load_n(&rwlk->readers, __ATOMIC_SEQ_CST)) ;
 }
 
 static void
 write_release_inner(struct rwspinlock *rwlk)
 {
-  __atomic_fetch_and(&rwlk->state, ~(1ULL << 63), __ATOMIC_RELEASE);
+  __atomic_store_n(&rwlk->active_writer, 0, __ATOMIC_SEQ_CST);
+  __atomic_fetch_sub(&rwlk->writers, 1, __ATOMIC_SEQ_CST);
 }
 
 void
@@ -189,7 +191,9 @@ write_release(struct rwspinlock *rwlk)
 void
 initrwlock(struct rwspinlock *rwlk)
 {
-  __atomic_store_n(&rwlk->state, 0, __ATOMIC_RELAXED);
+  __atomic_store_n(&rwlk->readers, 0, __ATOMIC_RELAXED);
+  __atomic_store_n(&rwlk->writers, 0, __ATOMIC_RELAXED);
+  __atomic_store_n(&rwlk->active_writer, 0, __ATOMIC_RELAXED);
 }
 
 // Test rwspinlock implementation.

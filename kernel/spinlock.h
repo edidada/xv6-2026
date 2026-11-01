@@ -14,7 +14,8 @@ struct spinlock {
 #ifdef LAB_LOCK
 // Reader-writer lock.
 struct rwspinlock {
-  // Low 32 bits: readers. Bits 32..62: waiting writers. Bit 63: writer.
-  uint64 state;
+  uint readers;
+  uint writers; // Includes the active writer until its release is complete.
+  uint active_writer;
 };
 #endif

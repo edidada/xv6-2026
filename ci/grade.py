@@ -1,6 +1,7 @@
 """Run the original grader while retaining every QEMU session, including passes."""
 from pathlib import Path
 import runpy
+import shutil
 import subprocess
 import sys
 
@@ -28,4 +29,7 @@ def record(self, *args, **kwargs):
 
 gradelib.Runner.run_qemu = record
 sys.argv[0] = "grade-lab-lock"
-runpy.run_path("grade-lab-lock", run_name="__main__")
+try:
+    runpy.run_path("grade-lab-lock", run_name="__main__")
+finally:
+    shutil.copyfile("/tmp/xv6-grade.log", "grade.log")
