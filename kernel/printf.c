@@ -158,7 +158,7 @@ backtrace(void)
   uint64 low = PGROUNDDOWN(fp), high = low + PGSIZE;
   printf("backtrace:\n");
   while(fp >= low+16 && fp < high && (fp & 7) == 0){
-    printf("%p\n", *(uint64 *)(fp-8));
+    printf("%p\n", (void *)*(uint64 *)(fp-8));
     uint64 next = *(uint64 *)(fp-16);
     if(next <= fp) break;
     fp = next;
