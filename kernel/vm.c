@@ -188,7 +188,14 @@ supermap(pagetable_t pt, uint64 va, uint64 pa, int perm)
   }
   pagetable_t l1 = (pagetable_t)PTE2PA(*root);
   pte_t *pte = &l1[PX(1, va)];
-  if(*pte & PTE_V) return -1;
+  if(*pte & PTE_V){
+    // A previous demotion may have left an empty level-0 table here.
+    if(PTE_LEAF(*pte)) return -1;
+    pagetable_t old = (pagetable_t)PTE2PA(*pte);
+    for(int i = 0; i < 512; i++)
+      if(old[i] & PTE_V) return -1;
+    kfree(old);
+  }
   *pte = PA2PTE(pa) | perm | PTE_V;
   return 0;
 }
