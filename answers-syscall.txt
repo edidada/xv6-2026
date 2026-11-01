@@ -1,0 +1,22 @@
+System-call lab notes (source-derived; exact instruction addresses depend on CI build).
+
+1. usertrap() calls syscall() after handling a user ecall and advancing epc.
+2. The initial init program opens console, so its first a7 is SYS_open = 15.
+   a7 selects the system call; a0 through a5 carry arguments.
+3. SSTATUS_SPP is clear on entry from user space: the previous mode was U.
+4. A deliberate *(int *)0 is a load from virtual address zero (typically lw).
+   The exact destination register and sepc must be read from the compiled
+   disassembly/GDB; they are compiler-dependent and are not claimed here.
+5. Address zero is not mapped by the kernel page table. scause 13 (0xd)
+   is a load page fault; stval zero identifies the inaccessible address.
+6. If the null load is inserted in the first syscall, the process is init,
+   pid 1. Later breakpoints can of course stop in other user processes.
+
+interpose stores a per-process rejection mask and allowed pathname. Fork
+copies both, allocation resets them, and exec preserves them. Masked open
+and exec are allowed only for an exact string match with the stored path.
+
+The attack relies solely on LAB_SYSCALL's intentionally uncleared allocated
+pages. It scans newly allocated memory for secret.c's marker, then validates
+and prints the following alphanumeric secret. No kernel clearing behavior
+or secret.c code has been changed.

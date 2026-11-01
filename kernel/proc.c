@@ -123,6 +123,8 @@ allocproc(void)
 
 found:
   p->pid = allocpid();
+  p->sandbox_mask = 0;
+  p->sandbox_path[0] = 0;
   p->state = USED;
 
   // Allocate a trapframe page.
@@ -272,6 +274,8 @@ kfork(void)
     return -1;
   }
   np->sz = p->sz;
+  np->sandbox_mask = p->sandbox_mask;
+  safestrcpy(np->sandbox_path, p->sandbox_path, sizeof(np->sandbox_path));
 
   // copy saved user registers.
   *(np->trapframe) = *(p->trapframe);
