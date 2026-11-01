@@ -142,7 +142,7 @@ syscall(void)
       char path[MAXPATH];
       if((num != SYS_open && num != SYS_exec) ||
          argstr(0, path, sizeof(path)) < 0 ||
-         strcmp(path, p->sandbox_path) != 0){
+         strncmp(path, p->sandbox_path, MAXPATH) != 0){
         p->trapframe->a0 = -1;
         return;
       }
