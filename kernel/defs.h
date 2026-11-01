@@ -57,6 +57,8 @@ void            ireclaim(int);
 
 // kalloc.c
 void*           kalloc(void);
+void            kaddref(uint64);
+int             krefcount(uint64);
 void            kfree(void *);
 void            kinit(void);
 
