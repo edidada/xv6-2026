@@ -5,10 +5,11 @@ For printf("%d %d\n", f(8)+1, 13), a0 is the format pointer, a1 is 12,
 and a2 holds 13. At optimization level -O the compiler can inline f and g
 and fold their arithmetic, so main need not contain a call to either.
 
-The actual printf address is the symbol named printf in user/call.asm.
-ra after jalr is the address of the instruction immediately following it.
-These addresses depend on the compiler and link; CI preserves call.asm
-and call.sym as artifacts rather than claiming fixed textbook addresses.
+In Actions run 41310976140 (GCC on Ubuntu 24.04), user/call.asm places
+printf at 0x706. main calls it using jal at 0x30 (the linker relaxed the
+call), so ra is 0x34 immediately afterward. main loads a2=13 at 0x24 and
+a1=12 at 0x26; f and g are inlined. CI preserves call.asm and call.sym
+as artifacts. Addresses can change after toolchain or source changes.
 
 The endian example prints He110 World. 57616 is hexadecimal e110;
 0x00646c72 has little-endian bytes 72 6c 64 00, spelling rld. For a
