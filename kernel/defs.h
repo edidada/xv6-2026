@@ -12,6 +12,10 @@ struct spinlock;
 struct sleeplock;
 struct stat;
 struct superblock;
+uint64          mmapfault(pagetable_t, uint64, int);
+int             vmaunmap(struct proc*, uint64, uint64);
+void            vmaclose(struct proc*);
+int             vmacopy(struct proc*, struct proc*);
 #ifdef LAB_LOCK
 struct rwspinlock;
 #endif

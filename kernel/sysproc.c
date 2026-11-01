@@ -55,7 +55,7 @@ sys_sbrk(void)
     // Lazily allocate memory for this process: increase its memory
     // size but don't allocate memory. If the processes uses the
     // memory, vmfault() will allocate it.
-    if(addr + n < addr)
+    if(addr + n < addr || addr + n >= MMAPBASE)
       return -1;
     myproc()->sz += n;
   }

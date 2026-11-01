@@ -23,7 +23,8 @@ ph
 barrier
 /lab-*.json
 .DS_Store
+._*
+.AppleDouble/
 *.dSYM
 *.pcap
 TAGS
-/fs.img.bk

@@ -123,6 +123,7 @@ allocproc(void)
 
 found:
   p->pid = allocpid();
+  memset(p->vmas, 0, sizeof(p->vmas));
   p->state = USED;
 
   // Allocate a trapframe page.
@@ -241,6 +242,7 @@ growproc(int n)
 
   sz = p->sz;
   if(n > 0){
+    if(sz + n < sz || sz + n >= MMAPBASE) return -1;
     if((sz = uvmalloc(p->pagetable, sz, sz + n, PTE_W)) == 0) {
       return -1;
     }
@@ -272,6 +274,11 @@ kfork(void)
     return -1;
   }
   np->sz = p->sz;
+  if(vmacopy(p, np) < 0){
+    freeproc(np);
+    release(&np->lock);
+    return -1;
+  }
 
   // copy saved user registers.
   *(np->trapframe) = *(p->trapframe);
@@ -329,6 +336,7 @@ kexit(int status)
     panic("init exiting");
 
   // Close all open files.
+  vmaclose(p);
   for(int fd = 0; fd < NOFILE; fd++){
     if(p->ofile[fd]){
       struct file *f = p->ofile[fd];

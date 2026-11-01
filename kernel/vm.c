@@ -361,6 +361,7 @@ copyout(pagetable_t pagetable, uint64 dstva, char *src, uint64 len)
     // forbid copyout over read-only user text pages.
     if((*pte & PTE_W) == 0)
       return -1;
+    *pte |= PTE_D;
       
     n = PGSIZE - (dstva - va0);
     if(n > len)
@@ -455,6 +456,8 @@ vmfault(pagetable_t pagetable, uint64 va, int read)
   uint64 mem;
   struct proc *p = myproc();
 
+  if(va >= MMAPBASE)
+    return mmapfault(pagetable, va, read);
   if (va >= p->sz)
     return 0;
   va = PGROUNDDOWN(va);
