@@ -45,3 +45,21 @@ gh run download RUN_ID -n lab-results
 评分产物包含 QEMU 输出；traps 另外保留 `call.asm` 和 `call.sym`；syscall 另外保留正常系统调用与空指针故障的 GDB 记录；pgtbl 另外保留页表测试和 usertests 的独立输出，并显式检查 `ALL TESTS PASSED`。
 
 完整验收以每个分支**最新提交**对应的已完成 Actions 为准。排队或运行中不代表通过；旧提交通过也不能代替新提交的验证。实验范围为官方必做题，未宣称完成页面列出的可选挑战，也没有向 Gradescope 提交。
+
+## 完整评分记录
+
+以下为 2026-11-01 已核实的固定验收快照，均为完整推送评分任务。后续提交的状态可用上面的 `gh` 命令按分支查询。
+
+| 分支后缀 | 验证提交 | 分数 | Actions 日志 |
+| --- | --- | --- | --- |
+| util | 347e1a0 | 131/131 | [41312659346](https://github.com/edidada/xv6-2026/actions/runs/41312659346) |
+| syscall | eb2f995 | 45/45 | [41311450285](https://github.com/edidada/xv6-2026/actions/runs/41311450285) |
+| pgtbl | 102d149 | 41/41 | [41311607262](https://github.com/edidada/xv6-2026/actions/runs/41311607262) |
+| traps | 4df4b4d | 95/95 | [41311301626](https://github.com/edidada/xv6-2026/actions/runs/41311301626) |
+| cow | 99ff473 | 130/130 | [41311006299](https://github.com/edidada/xv6-2026/actions/runs/41311006299) |
+| net | 42a8f39 | 171/171 | [41311079679](https://github.com/edidada/xv6-2026/actions/runs/41311079679) |
+| lock | 8f20869 | 100/100 | [41312598267](https://github.com/edidada/xv6-2026/actions/runs/41312598267) |
+| fs | 599a682 | 100/100 | [41311043046](https://github.com/edidada/xv6-2026/actions/runs/41311043046) |
+| mmap | c60e173 | 170/170 | [41311294085](https://github.com/edidada/xv6-2026/actions/runs/41311294085) |
+
+lock 的完整 QEMU 记录确认 `rwlktest: 4/4 CPUs succeeded` 和 `ALL TESTS PASSED`；pgtbl 的独立 usertests 记录同样确认 `ALL TESTS PASSED`。这些输出与分数一起用于验收。
