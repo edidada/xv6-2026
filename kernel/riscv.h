@@ -350,6 +350,15 @@ typedef uint64 *pagetable_t; // 512 PTEs
 #endif // __ASSEMBLER__
 
 #define PGSIZE 4096 // bytes per page
+#ifndef __ASSEMBLER__
+static inline uint64
+r_fp(void)
+{
+  uint64 x;
+  asm volatile("mv %0, s0" : "=r" (x));
+  return x;
+}
+#endif
 #define PGSHIFT 12  // bits of offset within a page
 
 #define PGROUNDUP(sz)  (((sz)+PGSIZE-1) & ~(PGSIZE-1))

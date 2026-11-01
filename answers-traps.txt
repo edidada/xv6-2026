@@ -1,0 +1,25 @@
+Reference: https://pdos.csail.mit.edu/6.1810/2025/labs/traps.html
+
+RISC-V passes the first eight integer/pointer arguments in a0 through a7.
+For printf("%d %d\n", f(8)+1, 13), a0 is the format pointer, a1 is 12,
+and a2 holds 13. At optimization level -O the compiler can inline f and g
+and fold their arithmetic, so main need not contain a call to either.
+
+The actual printf address is the symbol named printf in user/call.asm.
+ra after jalr is the address of the instruction immediately following it.
+These addresses depend on the compiler and link; CI preserves call.asm
+and call.sym as artifacts rather than claiming fixed textbook addresses.
+
+The endian example prints He110 World. 57616 is hexadecimal e110;
+0x00646c72 has little-endian bytes 72 6c 64 00, spelling rld. For a
+big-endian machine use 0x726c6400; 57616 does not change because printf
+formats its numeric value, rather than interpreting its bytes as text.
+
+printf("x=%d y=%d", 3) has undefined behavior: the second conversion has
+no corresponding argument and can consume whatever is left in the next
+argument register. There is no specified value after y=.
+
+backtrace follows saved ra at fp-8 and previous fp at fp-16, bounded by
+the current kernel stack page. sigalarm saves the entire trapframe before
+changing epc; sigreturn restores it, including a0, so interrupted user code
+resumes with its registers intact. An active flag suppresses re-entry.
