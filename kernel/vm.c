@@ -202,13 +202,20 @@ supermap(pagetable_t pt, uint64 va, uint64 pa, int perm)
 
 // Preserve physical pages while replacing a level-1 leaf with 512 leaves.
 static int
-demote(pte_t *pte)
+demote(pte_t *pte, uint64 removed_va, int do_free)
 {
-  pagetable_t child = (pagetable_t)kalloc();
-  if(!child) return -1;
   uint64 pa = PTE2PA(*pte), flags = PTE_FLAGS(*pte);
+  pagetable_t child = (pagetable_t)kalloc();
+  int recycled = -1;
+  if(!child){
+    if(!do_free) return -1;
+    // Under OOM, repurpose one page being unmapped as the page table.
+    // It stays allocated until freewalk or a later superpage promotion.
+    recycled = (removed_va % SUPERPGSIZE)/PGSIZE;
+    child = (pagetable_t)(pa + recycled*PGSIZE);
+  }
   for(int i = 0; i < 512; i++)
-    child[i] = PA2PTE(pa + i*PGSIZE) | flags;
+    child[i] = i == recycled ? 0 : PA2PTE(pa + i*PGSIZE) | flags;
   *pte = PA2PTE(child) | PTE_V;
   sfence_vma();
   return 0;
@@ -301,8 +308,9 @@ uvmunmap(pagetable_t pagetable, uint64 va, uint64 npages, int do_free)
         sz = SUPERPGSIZE;
         continue;
       }
-      if(demote(pte) < 0) panic("uvmunmap demote");
+      if(demote(pte, a, do_free) < 0) panic("uvmunmap demote");
       pte = walk(pagetable, a, 0);
+      if(!(*pte & PTE_V)) continue;
     }
     if(PTE_FLAGS(*pte) == PTE_V)
       panic("uvmunmap: not a leaf");
