@@ -124,29 +124,38 @@ release(struct spinlock *lk)
 static void
 read_acquire_inner(struct rwspinlock *rwlk)
 {
-  // Replace this with your implementation.
-  acquire(&rwlk->l);
+  for(;;){
+    uint64 state = __atomic_load_n(&rwlk->state, __ATOMIC_ACQUIRE);
+    if(state >> 32) continue;
+    if(__atomic_compare_exchange_n(&rwlk->state, &state, state+1, 0,
+                                  __ATOMIC_ACQUIRE, __ATOMIC_RELAXED)) return;
+  }
 }
 
 static void
 read_release_inner(struct rwspinlock *rwlk)
 {
-  // Replace this with your implementation.
-  release(&rwlk->l);
+  __atomic_fetch_sub(&rwlk->state, 1, __ATOMIC_RELEASE);
 }
 
 static void
 write_acquire_inner(struct rwspinlock *rwlk)
 {
-  // Replace this with your implementation.
-  acquire(&rwlk->l);
+  const uint64 pending = 1ULL << 32, writer = 1ULL << 63;
+  __atomic_fetch_add(&rwlk->state, pending, __ATOMIC_ACQ_REL);
+  for(;;){
+    uint64 state = __atomic_load_n(&rwlk->state, __ATOMIC_ACQUIRE);
+    if((state & writer) || (uint)state) continue;
+    uint64 desired = (state-pending) | writer;
+    if(__atomic_compare_exchange_n(&rwlk->state, &state, desired, 0,
+                                  __ATOMIC_ACQUIRE, __ATOMIC_RELAXED)) return;
+  }
 }
 
 static void
 write_release_inner(struct rwspinlock *rwlk)
 {
-  // Replace this with your implementation.
-  release(&rwlk->l);
+  __atomic_fetch_and(&rwlk->state, ~(1ULL << 63), __ATOMIC_RELEASE);
 }
 
 void
@@ -180,8 +189,7 @@ write_release(struct rwspinlock *rwlk)
 void
 initrwlock(struct rwspinlock *rwlk)
 {
-  // Replace this with your implementation.
-  initlock(&rwlk->l, "rwlk");
+  __atomic_store_n(&rwlk->state, 0, __ATOMIC_RELAXED);
 }
 
 // Test rwspinlock implementation.
