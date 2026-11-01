@@ -153,7 +153,7 @@ printwalk(pagetable_t pt, int level, uint64 base)
     if(!(pte & PTE_V)) continue;
     uint64 va = base | ((uint64)i << PXSHIFT(level));
     for(int d = 0; d < 3-level; d++) printf(" ..");
-    printf("%p: pte %p pa %p\n", va, pte, PTE2PA(pte));
+    printf("%p: pte %p pa %p\n", (void *)va, (void *)pte, (void *)PTE2PA(pte));
     if(level && !PTE_LEAF(pte))
       printwalk((pagetable_t)PTE2PA(pte), level-1, va);
   }
