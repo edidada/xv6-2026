@@ -28,7 +28,9 @@ main(int argc, char **argv)
       if(nr == 0 || strchr(" -\r\t\n./,", c)){
         if(n && valid && (mod5 == 0 || mod6 == 0)){
           token[n] = 0;
-          printf("%s\n", token);
+          char *number = token;
+          while(number[0] == '0' && number[1]) number++;
+          printf("%s\n", number);
         }
         n = mod5 = mod6 = 0;
         valid = 1;
