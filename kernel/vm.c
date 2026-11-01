@@ -137,16 +137,75 @@ walkaddr(pagetable_t pagetable, uint64 va)
   if((*pte & PTE_U) == 0)
     return 0;
   pa = PTE2PA(*pte);
+  pagetable_t l1 = (pagetable_t)PTE2PA(pagetable[PX(2, va)]);
+  if(pte == &l1[PX(1, va)])
+    pa += va & (SUPERPGSIZE-PGSIZE);
   return pa;
 }
 
 
 #if defined(LAB_PGTBL) || defined(SOL_MMAP) || defined(SOL_COW)
+static void
+printwalk(pagetable_t pt, int level, uint64 base)
+{
+  for(int i = 0; i < 512; i++){
+    pte_t pte = pt[i];
+    if(!(pte & PTE_V)) continue;
+    uint64 va = base | ((uint64)i << PXSHIFT(level));
+    for(int d = 0; d < 3-level; d++) printf(" ..");
+    printf("%p: pte %p pa %p\n", va, pte, PTE2PA(pte));
+    if(level && !PTE_LEAF(pte))
+      printwalk((pagetable_t)PTE2PA(pte), level-1, va);
+  }
+}
+
 void
 vmprint(pagetable_t pagetable) {
-  // your code here
+  printf("page table %p\n", pagetable);
+  printwalk(pagetable, 2, 0);
 }
 #endif
+
+static int
+leafsize(pagetable_t pt, uint64 va)
+{
+  pte_t pte = pt[PX(2, va)];
+  if(!(pte & PTE_V)) return PGSIZE;
+  pagetable_t l1 = (pagetable_t)PTE2PA(pte);
+  pte = l1[PX(1, va)];
+  return (pte & PTE_V) && PTE_LEAF(pte) ? SUPERPGSIZE : PGSIZE;
+}
+
+static int
+supermap(pagetable_t pt, uint64 va, uint64 pa, int perm)
+{
+  pte_t *root = &pt[PX(2, va)];
+  if(!(*root & PTE_V)){
+    pagetable_t child = (pagetable_t)kalloc();
+    if(!child) return -1;
+    memset(child, 0, PGSIZE);
+    *root = PA2PTE(child) | PTE_V;
+  }
+  pagetable_t l1 = (pagetable_t)PTE2PA(*root);
+  pte_t *pte = &l1[PX(1, va)];
+  if(*pte & PTE_V) return -1;
+  *pte = PA2PTE(pa) | perm | PTE_V;
+  return 0;
+}
+
+// Preserve physical pages while replacing a level-1 leaf with 512 leaves.
+static int
+demote(pte_t *pte)
+{
+  pagetable_t child = (pagetable_t)kalloc();
+  if(!child) return -1;
+  uint64 pa = PTE2PA(*pte), flags = PTE_FLAGS(*pte);
+  for(int i = 0; i < 512; i++)
+    child[i] = PA2PTE(pa + i*PGSIZE) | flags;
+  *pte = PA2PTE(child) | PTE_V;
+  sfence_vma();
+  return 0;
+}
 
 
 
@@ -223,11 +282,21 @@ uvmunmap(pagetable_t pagetable, uint64 va, uint64 npages, int do_free)
     panic("uvmunmap: not aligned");
 
   for(a = va; a < va + npages*PGSIZE; a += sz){
+    sz = PGSIZE;
     if((pte = walk(pagetable, a, 0)) == 0) // leaf page table entry allocated?
       continue;
     if((*pte & PTE_V) == 0)  // has physical page been allocated?
       continue;
-    sz = PGSIZE;
+    if(leafsize(pagetable, a) == SUPERPGSIZE){
+      if(a % SUPERPGSIZE == 0 && va + npages*PGSIZE-a >= SUPERPGSIZE){
+        if(do_free) superfree((void *)PTE2PA(*pte));
+        *pte = 0;
+        sz = SUPERPGSIZE;
+        continue;
+      }
+      if(demote(pte) < 0) panic("uvmunmap demote");
+      pte = walk(pagetable, a, 0);
+    }
     if(PTE_FLAGS(*pte) == PTE_V)
       panic("uvmunmap: not a leaf");
     if(do_free){
@@ -254,6 +323,17 @@ uvmalloc(pagetable_t pagetable, uint64 oldsz, uint64 newsz, int xperm)
   oldsz = PGROUNDUP(oldsz);
   for(a = oldsz; a < newsz; a += sz){
     sz = PGSIZE;
+    if(a % SUPERPGSIZE == 0 && newsz-a >= SUPERPGSIZE &&
+       (mem = superalloc()) != 0){
+      memset(mem, 0, SUPERPGSIZE);
+      if(supermap(pagetable, a, (uint64)mem, PTE_R|PTE_U|xperm) < 0){
+        superfree(mem);
+        uvmdealloc(pagetable, a, oldsz);
+        return 0;
+      }
+      sz = SUPERPGSIZE;
+      continue;
+    }
     mem = kalloc();
     if(mem == 0){
       uvmdealloc(pagetable, a, oldsz);
@@ -336,6 +416,7 @@ uvmcopy(pagetable_t old, pagetable_t new, uint64 sz)
   int szinc = PGSIZE;
 
   for(i = 0; i < sz; i += szinc){
+    szinc = PGSIZE;
     if((pte = walk(old, i, 0)) == 0)
       continue;
     if((*pte & PTE_V) == 0) {
@@ -344,6 +425,16 @@ uvmcopy(pagetable_t old, pagetable_t new, uint64 sz)
     szinc = PGSIZE;
     pa = PTE2PA(*pte);
     flags = PTE_FLAGS(*pte);
+    if(leafsize(old, i) == SUPERPGSIZE){
+      if((mem = superalloc()) == 0) goto err;
+      memmove(mem, (char *)pa, SUPERPGSIZE);
+      if(supermap(new, i, (uint64)mem, flags) < 0){
+        superfree(mem);
+        goto err;
+      }
+      szinc = SUPERPGSIZE;
+      continue;
+    }
     if((mem = kalloc()) == 0)
       goto err;
     memmove(mem, (char*)pa, PGSIZE);

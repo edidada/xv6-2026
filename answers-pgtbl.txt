@@ -1,0 +1,30 @@
+Reference: https://pdos.csail.mit.edu/6.1810/2025/labs/pgtbl.html
+
+Sv39 divides a virtual address into three 9-bit page-table indexes and a
+12-bit offset. Valid non-leaf entries point to another page-table page.
+V means valid, R/W/X control reads/writes/execution, U permits user access,
+A records access, and D records writes. Physical addresses depend on each
+run; the Actions pgtbltest transcript is the source of actual PTE values.
+
+Low virtual pages contain the ELF text (user-readable/executable), data
+and BSS (user-readable/writable), a stack guard (U clear), and the user
+stack (U/R/W). Unallocated gaps have no valid PTE. Allocation size and
+link layout determine how many low pages appear in print_pgtbl.
+
+The last three pages below MAXVA are USYSCALL at MAXVA-3*4096 (U/R,
+the process PID), TRAPFRAME at MAXVA-2*4096 (supervisor R/W, saved user
+registers), and TRAMPOLINE at MAXVA-4096 (supervisor R/X, trap entry and
+return instructions). Their U restrictions prevent users from modifying
+saved trap state or entering the trampoline directly. vmprint walks all
+valid levels; its leaf entries correspond to the entries returned by
+pgpte, while its intermediate entries describe page-table storage.
+
+uptime could also use a shared read-only page updated by timer interrupts.
+Unlike a PID, ticks change and require a defined atomic read/update
+protocol. A parent PID would need updates on reparenting.
+
+Two-MiB pages are level-1 leaves with aligned virtual and physical bases.
+Fork copies their contents into new superpages. Partial unmapping creates
+a level-0 table over the same physical pages, preserving the retained
+contents. The allocator tracks each constituent page so a demoted region
+is reusable as a superpage once all 512 constituent pages are free.

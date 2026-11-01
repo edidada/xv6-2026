@@ -23,11 +23,53 @@ struct {
   struct run *freelist;
 } kmem;
 
+// A 32 MiB reserve also lends individual pages under memory pressure.
+// Per-page allocation bits let demoted superpages be freed a page at a time.
+#define NSUPER 16
+#define SUPERBASE (PHYSTOP - NSUPER * SUPERPGSIZE)
+static struct {
+  struct spinlock lock;
+  uchar used[NSUPER][512];
+} smem;
+
+void *
+superalloc(void)
+{
+  acquire(&smem.lock);
+  for(int i = 0; i < NSUPER; i++){
+    int j;
+    for(j = 0; j < 512 && !smem.used[i][j]; j++) ;
+    if(j == 512){
+      memset(smem.used[i], 1, 512);
+      release(&smem.lock);
+      return (void *)(SUPERBASE + (uint64)i * SUPERPGSIZE);
+    }
+  }
+  release(&smem.lock);
+  return 0;
+}
+
+void
+superfree(void *pa)
+{
+  uint64 addr = (uint64)pa;
+  if(addr < SUPERBASE || addr >= PHYSTOP || addr % SUPERPGSIZE)
+    panic("superfree");
+  acquire(&smem.lock);
+  int i = (addr - SUPERBASE) / SUPERPGSIZE;
+  for(int j = 0; j < 512; j++)
+    if(!smem.used[i][j]) panic("superfree unused");
+  memset(pa, 1, SUPERPGSIZE);
+  memset(smem.used[i], 0, 512);
+  release(&smem.lock);
+}
+
 void
 kinit()
 {
   initlock(&kmem.lock, "kmem");
-  freerange(end, (void*)PHYSTOP);
+  initlock(&smem.lock, "supermem");
+  freerange(end, (void*)SUPERBASE);
 }
 
 void
@@ -50,6 +92,16 @@ kfree(void *pa)
 
   if(((uint64)pa % PGSIZE) != 0 || (char*)pa < end || (uint64)pa >= PHYSTOP)
     panic("kfree");
+
+  if((uint64)pa >= SUPERBASE){
+    uint64 n = ((uint64)pa - SUPERBASE) / PGSIZE;
+    acquire(&smem.lock);
+    if(!smem.used[n/512][n%512]) panic("kfree super unused");
+    memset(pa, 1, PGSIZE);
+    smem.used[n/512][n%512] = 0;
+    release(&smem.lock);
+    return;
+  }
 
   // Fill with junk to catch dangling refs.
   memset(pa, 1, PGSIZE);
@@ -76,6 +128,19 @@ kalloc(void)
     kmem.freelist = r->next;
   release(&kmem.lock);
 
+  if(!r){
+    acquire(&smem.lock);
+    for(int i = 0; i < NSUPER && !r; i++){
+      for(int j = 0; j < 512; j++){
+        if(!smem.used[i][j]){
+          smem.used[i][j] = 1;
+          r = (struct run *)(SUPERBASE + (uint64)i * SUPERPGSIZE + j * PGSIZE);
+          break;
+        }
+      }
+    }
+    release(&smem.lock);
+  }
   if(r)
     memset((char*)r, 5, PGSIZE); // fill with junk
   return (void*)r;
