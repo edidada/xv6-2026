@@ -23,6 +23,7 @@ jobs:
           GRADE_FILTER: ${{ inputs.grade_filter }}
         run: |
           set -o pipefail
+          trap 'cp /tmp/xv6-grade.log grade.log' EXIT
           python3 ci/grade.py $GRADE_FILTER 2>&1 | tee /tmp/xv6-grade.log
       - uses: actions/upload-artifact@v4
         if: always()

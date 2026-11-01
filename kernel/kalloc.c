@@ -62,7 +62,7 @@ kfree(void *pa)
   acquire(&kmem[id].lock);
   r->next = kmem[id].freelist;
   kmem[id].freelist = r;
-  kmem[id].count++;
+  __atomic_fetch_add(&kmem[id].count, 1, __ATOMIC_RELAXED);
   release(&kmem[id].lock);
   pop_off();
 }
@@ -81,20 +81,28 @@ kalloc(void)
   r = kmem[id].freelist;
   if(r){
     kmem[id].freelist = r->next;
-    kmem[id].count--;
+    __atomic_fetch_sub(&kmem[id].count, 1, __ATOMIC_RELAXED);
   }
   release(&kmem[id].lock);
-  for(int n = 1; !r && n < NCPU; n++){
-    int donor = (id+n)%NCPU;
+  while(!r){
+    // Prefer a well-stocked list over another CPU's last reusable page.
+    // Counts are hints only; the donor lock still protects the actual list.
+    int donor = -1, most = 0;
+    for(int n = 1; n < NCPU; n++){
+      int candidate = (id+n)%NCPU;
+      int count = __atomic_load_n(&kmem[candidate].count, __ATOMIC_RELAXED);
+      if(count > most){ most = count; donor = candidate; }
+    }
+    if(donor < 0) break;
     acquire(&kmem[donor].lock);
     struct run *batch = kmem[donor].freelist;
     if(batch){
       struct run *last = batch;
-      int take = (kmem[donor].count+1)/2;
-      if(take > 64) take = 64;
+      int take = (__atomic_load_n(&kmem[donor].count, __ATOMIC_RELAXED)+1)/2;
+      if(take > 256) take = 256;
       for(int j = 1; j < take; j++) last = last->next;
       kmem[donor].freelist = last->next;
-      kmem[donor].count -= take;
+      __atomic_fetch_sub(&kmem[donor].count, take, __ATOMIC_RELAXED);
       last->next = 0;
       release(&kmem[donor].lock);
       r = batch;
@@ -102,7 +110,7 @@ kalloc(void)
         acquire(&kmem[id].lock);
         last->next = kmem[id].freelist;
         kmem[id].freelist = batch->next;
-        kmem[id].count += take-1;
+        __atomic_fetch_add(&kmem[id].count, take-1, __ATOMIC_RELAXED);
         release(&kmem[id].lock);
       }
     } else {
