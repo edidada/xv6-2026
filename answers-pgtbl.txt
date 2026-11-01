@@ -6,6 +6,20 @@ V means valid, R/W/X control reads/writes/execution, U permits user access,
 A records access, and D records writes. Physical addresses depend on each
 run; the Actions pgtbltest transcript is the source of actual PTE values.
 
+Measured snapshot from Actions run 41311382563 (all 20 printed entries):
+  VA 0x0, 0x1000: perm 0x5b = V/R/X/U/A, user code.
+  VA 0x2000: perm 0x17 = V/R/W/U, data and BSS. By vmprint it becomes
+    0xd7 = V/R/W/U/A/D after accesses and writes; hardware sets A and D.
+  VA 0x3000: perm 0x07 = V/R/W, stack guard with no user access.
+  VA 0x4000: perm 0xd7 = V/R/W/U/A/D, user stack.
+  VA 0x5000 through 0x9000: PTE zero, five unmapped entries.
+  VA 0x3fffff6000 through 0x3fffffc000: PTE zero, seven unmapped entries.
+  VA 0x3fffffd000: perm 0x13 = V/R/U, PID page; later 0x53 adds A.
+  VA 0x3fffffe000: perm 0xc7 = V/R/W/A/D, supervisor trapframe.
+  VA 0x3ffffff000: perm 0x4b = V/R/X/A, supervisor trampoline.
+The root entries at 0 and 0x3fc0000000 and the intermediate entries at
+0 and 0x3fffe00000 are V-only references to lower-level page tables.
+
 Low virtual pages contain the ELF text (user-readable/executable), data
 and BSS (user-readable/writable), a stack guard (U clear), and the user
 stack (U/R/W). Unallocated gaps have no valid PTE. Allocation size and
