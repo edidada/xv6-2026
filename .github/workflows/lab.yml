@@ -17,6 +17,12 @@ jobs:
         run: |
           set -o pipefail
           make grade TOOLPREFIX=riscv64-linux-gnu- 2>&1 | tee grade.log
+      - name: Preserve and check usertests and page-table transcripts
+        run: |
+          cp xv6.out usertests.out
+          grep -q '^ALL TESTS PASSED' usertests.out
+          ./grade-lab-pgtbl pgtbltest
+          cp xv6.out pgtbltest.out
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -24,3 +30,5 @@ jobs:
           path: |
             grade.log
             xv6.out*
+            usertests.out
+            pgtbltest.out
