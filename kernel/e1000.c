@@ -93,6 +93,21 @@ e1000_init(uint32 *xregs)
 int
 e1000_transmit(char *buf, int len)
 {
+  if(len <= 0 || len > PGSIZE) return -1;
+  acquire(&e1000_lock);
+  int tail = regs[E1000_TDT];
+  if(!(tx_ring[tail].status & E1000_TXD_STAT_DD)){
+    release(&e1000_lock);
+    return -1;
+  }
+  if(tx_ring[tail].addr) kfree((void *)tx_ring[tail].addr);
+  tx_ring[tail].addr = (uint64)buf;
+  tx_ring[tail].length = len;
+  tx_ring[tail].cmd = E1000_TXD_CMD_EOP | E1000_TXD_CMD_RS;
+  tx_ring[tail].status = 0;
+  __sync_synchronize();
+  regs[E1000_TDT] = (tail+1) % TX_RING_SIZE;
+  release(&e1000_lock);
   //
   // Your code here.
   //
@@ -112,6 +127,27 @@ e1000_transmit(char *buf, int len)
 static void
 e1000_recv(void)
 {
+  for(;;){
+    acquire(&e1000_lock);
+    int next = (regs[E1000_RDT]+1) % RX_RING_SIZE;
+    if(!(rx_ring[next].status & E1000_RXD_STAT_DD)){
+      release(&e1000_lock);
+      break;
+    }
+    __sync_synchronize();
+    char *buf = (char *)rx_ring[next].addr;
+    int len = rx_ring[next].length;
+    char *replacement = kalloc();
+    int deliver = replacement && !rx_ring[next].errors &&
+                  (rx_ring[next].status & E1000_RXD_STAT_EOP);
+    if(replacement) rx_ring[next].addr = (uint64)replacement;
+    rx_ring[next].status = 0;
+    __sync_synchronize();
+    regs[E1000_RDT] = next;
+    release(&e1000_lock);
+    if(deliver) net_rx(buf, len);
+    else if(replacement) kfree(buf);
+  }
   //
   // Your code here.
   //
