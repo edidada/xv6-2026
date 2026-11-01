@@ -3,6 +3,11 @@ on:
   push:
     branches: ['edidada/**']
   workflow_dispatch:
+    inputs:
+      grade_filter:
+        description: Optional original grader test filter
+        required: false
+        default: ''
 permissions:
   contents: read
 jobs:
@@ -14,13 +19,16 @@ jobs:
       - name: Install RISC-V and QEMU
         run: sudo apt-get update && sudo apt-get install -y gcc-riscv64-linux-gnu binutils-riscv64-linux-gnu qemu-system-misc gdb-multiarch python3 bc
       - name: Compile and grade
+        env:
+          GRADE_FILTER: ${{ inputs.grade_filter }}
         run: |
           set -o pipefail
-          make grade TOOLPREFIX=riscv64-linux-gnu- 2>&1 | tee grade.log
+          python3 ci/grade.py $GRADE_FILTER 2>&1 | tee /tmp/xv6-grade.log
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: lab-results
           path: |
-            grade.log
+            /tmp/xv6-grade.log
             xv6.out*
+            ci-transcripts/

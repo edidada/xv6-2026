@@ -21,6 +21,7 @@ struct run {
 struct {
   struct spinlock lock;
   struct run *freelist;
+  int count;
 } kmem[NCPU];
 
 void
@@ -61,6 +62,7 @@ kfree(void *pa)
   acquire(&kmem[id].lock);
   r->next = kmem[id].freelist;
   kmem[id].freelist = r;
+  kmem[id].count++;
   release(&kmem[id].lock);
   pop_off();
 }
@@ -77,8 +79,10 @@ kalloc(void)
   int id = cpuid();
   acquire(&kmem[id].lock);
   r = kmem[id].freelist;
-  if(r)
+  if(r){
     kmem[id].freelist = r->next;
+    kmem[id].count--;
+  }
   release(&kmem[id].lock);
   for(int n = 1; !r && n < NCPU; n++){
     int donor = (id+n)%NCPU;
@@ -86,8 +90,11 @@ kalloc(void)
     struct run *batch = kmem[donor].freelist;
     if(batch){
       struct run *last = batch;
-      for(int j = 1; j < 64 && last->next; j++) last = last->next;
+      int take = (kmem[donor].count+1)/2;
+      if(take > 64) take = 64;
+      for(int j = 1; j < take; j++) last = last->next;
       kmem[donor].freelist = last->next;
+      kmem[donor].count -= take;
       last->next = 0;
       release(&kmem[donor].lock);
       r = batch;
@@ -95,6 +102,7 @@ kalloc(void)
         acquire(&kmem[id].lock);
         last->next = kmem[id].freelist;
         kmem[id].freelist = batch->next;
+        kmem[id].count += take-1;
         release(&kmem[id].lock);
       }
     } else {

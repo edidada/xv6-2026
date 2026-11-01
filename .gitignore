@@ -25,6 +25,7 @@ barrier
 .DS_Store
 ._*
 .AppleDouble/
+ci-transcripts/
 *.dSYM
 *.pcap
 TAGS
