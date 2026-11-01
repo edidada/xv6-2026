@@ -1,16 +1,19 @@
-System-call lab notes (source-derived; exact instruction addresses depend on CI build).
+System-call lab notes; measured with Actions run 41311342128 and GDB.
 
 1. usertrap() calls syscall() after handling a user ecall and advancing epc.
 2. The initial init program opens console, so its first a7 is SYS_open = 15.
    a7 selects the system call; a0 through a5 carry arguments.
-3. SSTATUS_SPP is clear on entry from user space: the previous mode was U.
-4. A deliberate *(int *)0 is a load from virtual address zero (typically lw).
-   The exact destination register and sepc must be read from the compiled
-   disassembly/GDB; they are compiler-dependent and are not claimed here.
+3. GDB reports sstatus=0x200000022. SSTATUS_SPP (bit 8) is clear, so the
+   previous mode was U. The backtrace shows usertrap -> syscall.
+4. In the separately built deliberate null-load variant, GDB reports
+   sepc=0x80001d0c, instruction lw a5,0(zero), so a5 receives num's load.
+   These instruction addresses are specific to that compiler and build.
 5. Address zero is not mapped by the kernel page table. scause 13 (0xd)
    is a load page fault; stval zero identifies the inaccessible address.
-6. If the null load is inserted in the first syscall, the process is init,
-   pid 1. Later breakpoints can of course stop in other user processes.
+6. Both GDB observations show process name init and pid 1. The normal
+   first-syscall observation shows a7=0xf (SYS_open). The null-load
+   observation shows scause=0xd and stval=0. Both raw GDB transcripts are
+   preserved as Actions artifacts. The script restores syscall.c afterward.
 
 interpose stores a per-process rejection mask and allowed pathname. Fork
 copies both, allocation resets them, and exec preserves them. Masked open
